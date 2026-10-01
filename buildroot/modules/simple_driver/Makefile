@@ -12,3 +12,4 @@ clean:
 	rm -f *.o *.ko .*.cmd
 	rm -f modules.order Module.symvers simple_driver.mod.c
 	rm -f test_simple_driver
+

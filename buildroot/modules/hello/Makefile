@@ -12,3 +12,4 @@ clean:
 	rm -f modules.order
 	rm -f Module.symvers
 	rm -f khello.mod.c
+

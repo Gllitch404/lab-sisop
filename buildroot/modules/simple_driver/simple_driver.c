@@ -169,3 +169,4 @@ static ssize_t dev_write(struct file *filep, const char __user *buffer, size_t l
 
 module_init(simple_driver_init);
 module_exit(simple_driver_exit);
+
