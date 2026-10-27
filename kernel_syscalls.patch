@@ -1,8 +1,7 @@
 diff --git a/Makefile b/Makefile
-index aa026795..8e0fecaf 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -941,7 +941,7 @@ endif
+@@ -941,7 +941,7 @@
  
  
  ifeq ($(KBUILD_EXTMOD),)
@@ -13,10 +12,9 @@ index aa026795..8e0fecaf 100644
  		     $(core-y) $(core-m) $(drivers-y) $(drivers-m) \
 diff --git a/arch/x86/configs/qemu_x86_custom_defconfig b/arch/x86/configs/qemu_x86_custom_defconfig
 new file mode 100644
-index 00000000..dd539847
---- /dev/null
+--- a/arch/x86/configs/qemu_x86_custom_defconfig
 +++ b/arch/x86/configs/qemu_x86_custom_defconfig
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,58 @@
 +CONFIG_SYSVIPC=y
 +CONFIG_CGROUPS=y
 +CONFIG_MODULES=y
@@ -70,8 +68,12 @@ index 00000000..dd539847
 +CONFIG_AUTOFS4_FS=y
 +CONFIG_TMPFS=y
 +CONFIG_TMPFS_POSIX_ACL=y
++CONFIG_DEBUG_FS=y
++CONFIG_FTRACE=y
++CONFIG_FUNCTION_TRACER=y
++CONFIG_FUNCTION_GRAPH_TRACER=y
++CONFIG_DYNAMIC_FTRACE=y
 diff --git a/arch/x86/entry/syscalls/syscall_32.tbl b/arch/x86/entry/syscalls/syscall_32.tbl
-index 448ac216..32bb9b09 100644
 --- a/arch/x86/entry/syscalls/syscall_32.tbl
 +++ b/arch/x86/entry/syscalls/syscall_32.tbl
 @@ -391,3 +391,6 @@
@@ -82,29 +84,157 @@ index 448ac216..32bb9b09 100644
 +386	i386	listSleepProcesses	sys_listSleepProcesses
 +387	i386	printMessage		sys_printMessage
 diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
-index 3cb15ea4..32dce04d 100644
 --- a/include/linux/syscalls.h
 +++ b/include/linux/syscalls.h
-@@ -905,5 +905,8 @@ asmlinkage long sys_pkey_alloc(unsigned long flags, unsigned long init_val);
- asmlinkage long sys_pkey_free(int pkey);
+@@ -906,4 +906,8 @@
  asmlinkage long sys_statx(int dfd, const char __user *path, unsigned flags,
  			  unsigned mask, struct statx __user *buffer);
+ 
+-#endif
 +asmlinkage long sys_listProcessInfo(long pid, const char __user *buf, int size);
 +asmlinkage long sys_listSleepProcesses(char __user *buf, int size);
 +asmlinkage long sys_printMessage(const char __user *msg, int len);
++
++#endif
+diff --git a/include/uapi/linux/sched.h b/include/uapi/linux/sched.h
+--- a/include/uapi/linux/sched.h
++++ b/include/uapi/linux/sched.h
+@@ -39,6 +39,7 @@
+ /* SCHED_ISO: reserved but not implemented yet */
+ #define SCHED_IDLE		5
+ #define SCHED_DEADLINE		6
++#define SCHED_LOW_IDLE		7
  
- #endif
+ /* Can be ORed in to make sure the process is reverted back to SCHED_NORMAL on fork */
+ #define SCHED_RESET_ON_FORK     0x40000000
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -746,6 +746,11 @@
+ 		load->inv_weight = WMULT_IDLEPRIO;
+ 		return;
+ 	}
++	if (idle_low_policy(p->policy)) {
++		load->weight = scale_load(WEIGHT_LOW_IDLEPRIO);
++		load->inv_weight = WMULT_LOW_IDLEPRIO;
++		return;
++	}
+ 
+ 	load->weight = scale_load(sched_prio_to_weight[prio]);
+ 	load->inv_weight = sched_prio_to_wmult[prio];
+@@ -4050,7 +4055,8 @@
+ 		 * Treat SCHED_IDLE as nice 20. Only allow a switch to
+ 		 * SCHED_NORMAL if the RLIMIT_NICE would normally permit it.
+ 		 */
+-		if (idle_policy(p->policy) && !idle_policy(policy)) {
++		if ((idle_policy(p->policy) || idle_low_policy(p->policy)) &&
++		    (!idle_policy(policy) && !idle_low_policy(policy))) {
+ 			if (!can_nice(p, task_nice(p)))
+ 				return -EPERM;
+ 		}
+@@ -5021,6 +5027,7 @@
+ 	case SCHED_NORMAL:
+ 	case SCHED_BATCH:
+ 	case SCHED_IDLE:
++	case SCHED_LOW_IDLE:
+ 		ret = 0;
+ 		break;
+ 	}
+@@ -5048,6 +5055,7 @@
+ 	case SCHED_NORMAL:
+ 	case SCHED_BATCH:
+ 	case SCHED_IDLE:
++	case SCHED_LOW_IDLE:
+ 		ret = 0;
+ 	}
+ 	return ret;
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -6064,7 +6064,8 @@
+ 
+ static void set_last_buddy(struct sched_entity *se)
+ {
+-	if (entity_is_task(se) && unlikely(task_of(se)->policy == SCHED_IDLE))
++	if (entity_is_task(se) && unlikely(task_of(se)->policy == SCHED_IDLE ||
++					   task_of(se)->policy == SCHED_LOW_IDLE))
+ 		return;
+ 
+ 	for_each_sched_entity(se) {
+@@ -6076,7 +6077,8 @@
+ 
+ static void set_next_buddy(struct sched_entity *se)
+ {
+-	if (entity_is_task(se) && unlikely(task_of(se)->policy == SCHED_IDLE))
++	if (entity_is_task(se) && unlikely(task_of(se)->policy == SCHED_IDLE ||
++					   task_of(se)->policy == SCHED_LOW_IDLE))
+ 		return;
+ 
+ 	for_each_sched_entity(se) {
+@@ -6135,7 +6137,12 @@
+ 
+ 	/* Idle tasks are by definition preempted by non-idle tasks. */
+ 	if (unlikely(curr->policy == SCHED_IDLE) &&
+-	    likely(p->policy != SCHED_IDLE))
++	    likely(p->policy != SCHED_IDLE && p->policy != SCHED_LOW_IDLE))
++		goto preempt;
++
++	/* Low idle tasks are preempted by any other type of task. */
++	if (unlikely(curr->policy == SCHED_LOW_IDLE) &&
++	    likely(p->policy != SCHED_LOW_IDLE))
+ 		goto preempt;
+ 
+ 	/*
+@@ -6534,7 +6541,7 @@
+ 	if (p->sched_class != &fair_sched_class)
+ 		return 0;
+ 
+-	if (unlikely(p->policy == SCHED_IDLE))
++	if (unlikely(p->policy == SCHED_IDLE || p->policy == SCHED_LOW_IDLE))
+ 		return 0;
+ 
+ 	/*
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -125,6 +125,10 @@
+ {
+ 	return policy == SCHED_IDLE;
+ }
++static inline int idle_low_policy(int policy)
++{
++	return policy == SCHED_LOW_IDLE;
++}
+ static inline int fair_policy(int policy)
+ {
+ 	return policy == SCHED_NORMAL || policy == SCHED_BATCH;
+@@ -141,7 +145,7 @@
+ }
+ static inline bool valid_policy(int policy)
+ {
+-	return idle_policy(policy) || fair_policy(policy) ||
++	return idle_policy(policy) || idle_low_policy(policy) || fair_policy(policy) ||
+ 		rt_policy(policy) || dl_policy(policy);
+ }
+ 
+@@ -1352,6 +1356,8 @@
+ 
+ #define WEIGHT_IDLEPRIO                3
+ #define WMULT_IDLEPRIO         1431655765
++#define WEIGHT_LOW_IDLEPRIO            1
++#define WMULT_LOW_IDLEPRIO     1431655765
+ 
+ extern const int sched_prio_to_weight[40];
+ extern const u32 sched_prio_to_wmult[40];
 diff --git a/syscall/Makefile b/syscall/Makefile
 new file mode 100644
-index 00000000..5dbf2f9a
---- /dev/null
+--- a/syscall/Makefile
 +++ b/syscall/Makefile
 @@ -0,0 +1 @@
 +obj-y := processInfo.o sleepProcesses.o printMessage.o
 diff --git a/syscall/printMessage.c b/syscall/printMessage.c
 new file mode 100644
-index 00000000..78eee28b
---- /dev/null
+--- a/syscall/printMessage.c
 +++ b/syscall/printMessage.c
 @@ -0,0 +1,24 @@
 +#include <linux/kernel.h>
@@ -133,10 +263,9 @@ index 00000000..78eee28b
 +}
 diff --git a/syscall/processInfo.c b/syscall/processInfo.c
 new file mode 100644
-index 00000000..c1801d38
---- /dev/null
+--- a/syscall/processInfo.c
 +++ b/syscall/processInfo.c
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,40 @@
 +#include <linux/kernel.h>
 +#include <linux/init.h>
 +#include <linux/sched.h>
@@ -177,19 +306,15 @@ index 00000000..c1801d38
 +	/* Process not found */
 +	return -2;	
 +}
-+
 diff --git a/syscall/processInfo.h b/syscall/processInfo.h
 new file mode 100644
-index 00000000..5d798d59
---- /dev/null
+--- a/syscall/processInfo.h
 +++ b/syscall/processInfo.h
-@@ -0,0 +1,2 @@
+@@ -0,0 +1 @@
 +asmlinkage long sys_listProcessInfo(long pid, const char __user *buf, int size);
-+
 diff --git a/syscall/sleepProcesses.c b/syscall/sleepProcesses.c
 new file mode 100644
-index 00000000..99f0286b
---- /dev/null
+--- a/syscall/sleepProcesses.c
 +++ b/syscall/sleepProcesses.c
 @@ -0,0 +1,51 @@
 +#include <linux/kernel.h>

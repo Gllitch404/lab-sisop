@@ -9,11 +9,11 @@ if [ ! -d "linux-4.13.9" ]; then
     tar -xf linux-4.13.9.tar.xz
 fi
 
-echo "Aplicando patch do kernel (syscalls e custom defconfig)..."
+echo "Aplicando patch do kernel (syscalls, SCHED_LOW_IDLE, ftrace e custom defconfig)..."
 cd linux-4.13.9
 if patch -p1 -N --dry-run < ../kernel_syscalls.patch > /dev/null 2>&1; then
     patch -p1 < ../kernel_syscalls.patch
     echo "Patch do Kernel aplicado com sucesso!"
 else
-    echo "Patch já aplicado ou arquivos já configurados."
+    echo "Patch ja aplicado ou arquivos ja configurados."
 fi

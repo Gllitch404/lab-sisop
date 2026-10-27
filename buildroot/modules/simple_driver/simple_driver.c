@@ -14,7 +14,7 @@
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("DIEGO FRAGA DE MELLO");
-MODULE_DESCRIPTION("Simple Linux Character Device Driver with struct list_head");
+MODULE_DESCRIPTION("Simple Linux Character Device Driver with struct list_head and trace_printk");
 
 static int major_number;
 static struct class*  simple_class  = NULL;
@@ -44,19 +44,20 @@ static struct file_operations fops = {
 };
 
 static int __init simple_driver_init(void) {
-	printk(KERN_INFO "simple_driver: Initializing the simple_driver\n");
+	/* Tutorial 3.1 - Secao 6: Substituindo chamadas a printk() por trace_printk() */
+	trace_printk("simple_driver: Initializing the simple_driver\n");
 
 	major_number = register_chrdev(0, DEVICE_NAME, &fops);
 	if (major_number < 0) {
-		printk(KERN_ALERT "simple_driver: Failed to register a major number\n");
+		trace_printk("simple_driver: Failed to register a major number\n");
 		return major_number;
 	}
-	printk(KERN_INFO "simple_driver: registered with major number %d\n", major_number);
+	trace_printk("simple_driver: registered with major number %d\n", major_number);
 
 	simple_class = class_create(THIS_MODULE, CLASS_NAME);
 	if (IS_ERR(simple_class)) {
 		unregister_chrdev(major_number, DEVICE_NAME);
-		printk(KERN_ALERT "simple_driver: Failed to register device class\n");
+		trace_printk("simple_driver: Failed to register device class\n");
 		return PTR_ERR(simple_class);
 	}
 
@@ -64,11 +65,11 @@ static int __init simple_driver_init(void) {
 	if (IS_ERR(simple_device)) {
 		class_destroy(simple_class);
 		unregister_chrdev(major_number, DEVICE_NAME);
-		printk(KERN_ALERT "simple_driver: Failed to create device /dev/%s\n", DEVICE_NAME);
+		trace_printk("simple_driver: Failed to create device /dev/%s\n", DEVICE_NAME);
 		return PTR_ERR(simple_device);
 	}
 
-	printk(KERN_INFO "simple_driver: Device /dev/%s created successfully\n", DEVICE_NAME);
+	trace_printk("simple_driver: Device /dev/%s created successfully\n", DEVICE_NAME);
 	return 0;
 }
 
@@ -87,16 +88,16 @@ static void __exit simple_driver_exit(void) {
 	class_unregister(simple_class);
 	class_destroy(simple_class);
 	unregister_chrdev(major_number, DEVICE_NAME);
-	printk(KERN_INFO "simple_driver: Unloaded and cleaned up successfully\n");
+	trace_printk("simple_driver: Unloaded and cleaned up successfully\n");
 }
 
 static int dev_open(struct inode *inodep, struct file *filep) {
-	printk(KERN_INFO "simple_driver: Device opened\n");
+	trace_printk("simple_driver: Device opened\n");
 	return 0;
 }
 
 static int dev_release(struct inode *inodep, struct file *filep) {
-	printk(KERN_INFO "simple_driver: Device closed\n");
+	trace_printk("simple_driver: Device closed\n");
 	return 0;
 }
 
@@ -113,7 +114,7 @@ static ssize_t dev_read(struct file *filep, char __user *buffer, size_t len, lof
 	mutex_lock(&msg_mutex);
 	if (list_empty(&msg_list)) {
 		mutex_unlock(&msg_mutex);
-		printk(KERN_INFO "simple_driver: Read called, but list is empty\n");
+		trace_printk("simple_driver: Read called, but list is empty\n");
 		return 0; /* EOF / lista vazia */
 	}
 
@@ -129,7 +130,7 @@ static ssize_t dev_read(struct file *filep, char __user *buffer, size_t len, lof
 		return -EFAULT;
 	}
 
-	printk(KERN_INFO "simple_driver: Read removed message \"%s\" (%zu bytes)\n", node->data, to_copy);
+	trace_printk("simple_driver: Read removed message \"%s\" (%zu bytes)\n", node->data, to_copy);
 	kfree(node);
 
 	return to_copy;
@@ -163,10 +164,9 @@ static ssize_t dev_write(struct file *filep, const char __user *buffer, size_t l
 	list_add_tail(&node->list, &msg_list);
 	mutex_unlock(&msg_mutex);
 
-	printk(KERN_INFO "simple_driver: Stored message \"%s\" (%zu bytes) in linked list\n", node->data, to_copy);
+	trace_printk("simple_driver: Stored message \"%s\" (%zu bytes) in linked list\n", node->data, to_copy);
 	return to_copy;
 }
 
 module_init(simple_driver_init);
 module_exit(simple_driver_exit);
-

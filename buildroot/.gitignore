@@ -13,3 +13,6 @@
 *~
 *.pyc
 /target
+
+/sdb.bin
+*.bin

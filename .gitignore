@@ -1,0 +1,30 @@
+# Linux Kernel extraído para compilação local (gerado a partir de linux-4.13.9.tar.xz)
+/linux-4.13.9/
+
+# Imagens de disco QEMU (Tutorial 2.4 - Secao 2: "Tal arquivo tera tamanho 1GB, portanto nao se preocupe em salva-lo")
+*.bin
+sdb.bin
+buildroot/sdb.bin
+
+# Arquivos de saida e compilação do Buildroot
+buildroot/output/
+buildroot/dl/
+buildroot/target/
+
+# Modulos e binarios compilados
+*.o
+*.ko
+*.mod.c
+*.mod
+modules.order
+Module.symvers
+.tmp_versions/
+disk_test
+test_simple_driver
+test_xtea_driver
+setpriority/setpriority
+setpriority/deadline
+setpriority/thread_runner
+buildroot/setpriority/setpriority
+buildroot/setpriority/deadline
+buildroot/setpriority/thread_runner

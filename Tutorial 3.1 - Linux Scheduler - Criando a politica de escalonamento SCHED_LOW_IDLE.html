@@ -1,0 +1,271 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+<HEAD>
+<META NAME="generator" CONTENT="http://txt2tags.org">
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Tutorial 3.1: Linux Scheduler - Criando a política de escalonamento SCHED_LOW_IDLE</TITLE>
+
+<STYLE TYPE="text/css">
+pre {
+	background-color:#E0E0E0;
+}
+</STYLE>
+
+</HEAD><BODY BGCOLOR="white" TEXT="black">
+<CENTER>
+<H1>Tutorial 3.1: Linux Scheduler - Criando a política de escalonamento SCHED_LOW_IDLE</H1>
+</CENTER>
+
+<P></P>
+<HR NOSHADE SIZE=1>
+<P></P>
+
+  <OL>
+  <LI><A HREF="#toc1">Objetivo</A>
+  <LI><A HREF="#toc2">Introdução</A>
+  <LI><A HREF="#toc3">Modificações no Escalonador</A>
+    <UL>
+    <LI><A HREF="#toc4">3.1. Arquivo: include/uapi/linux/sched.h</A>
+    <LI><A HREF="#toc5">3.2. Arquivo: kernel/sched/sched.h</A>
+    <LI><A HREF="#toc6">3.3. Arquivo: kernel/sched/core.c</A>
+      <UL>
+      <LI><A HREF="#toc7">3.3.1. set_load_weight()</A>
+      <LI><A HREF="#toc8">3.3.2. __sched_setscheduler()</A>
+      <LI><A HREF="#toc9">3.3.3. sched_get_priority_max() e sched_get_priority_min()</A>
+      </UL>
+    <LI><A HREF="#toc10">3.4. Arquivo: kernel/sched/fair.c</A>
+      <UL>
+      <LI><A HREF="#toc11">3.4.1. set_last_buddy() e set_next_buddy()</A>
+      <LI><A HREF="#toc12">3.4.2. task_hot()</A>
+      <LI><A HREF="#toc13">3.4.3. check_preempt_wakeup()</A>
+      </UL>
+    </UL>
+  <LI><A HREF="#toc14">Finalizando</A>
+  </OL>
+
+<P></P>
+<HR NOSHADE SIZE=1>
+<P></P>
+
+<A NAME="toc1"></A>
+<H1>1. Objetivo</H1>
+
+<P>
+O objetivo deste tutorial é guiá-lo através dos fontes do escalonador do Linux e instruí-lo a implementar uma nova política de escalonamento, chamada SCHED_LOW_IDLE. 
+Os processos pertencentes a nova classe de escalonamento terão prioridade menor que a política SCHED_IDLE. Além da modificação no kernel, será necessário implementar 
+uma aplicação para colocar um processo qualquer em escalonamento SCHED_LOW_IDLE. 
+</P>
+
+<A NAME="toc2"></A>
+<H1>2. Introdução</H1>
+
+<P>
+Quando um processo é configurado para a política de escalonamento SCHED_IDLE, ele somente irá executar quando nenhum outro processo estiver pronto, ou seja, quando o processador 
+precisar entrar em modo <I>idle</I> (sem nenhuma tarefa para fazer). Este modo de escalonamento é útil para situações onde o usuário deseja realizar uma tarefa de menor importância e 
+que deverá ser executa, principalmente, quando o sistema estiver com baixa ou nenhuma utilização, por exemplo, executando a aplicação SETI@HOME ou tentando quebrar códigos criptográficos. 
+</P>
+<P>
+A criação de uma classe de escalonamento com menor prioridade que SCHED_IDLE, significa que, processos nesta classe apenas serão escalonandos quando não existirem processos SCHED_IDLE 
+prontos para executar. 
+</P>
+<P>
+Os arquivos que deverão ser modificados estão listados abaixo:
+</P>
+
+<UL>
+<LI>include/uapi/linux/sched.h
+<LI>kernel/sched/sched.h
+<LI>kernel/sched/core.c
+<LI>kernel/sched/fair.c
+</UL>
+
+<P>
+Este tutorial não irá mostrar a implementação em detalhes, em vez disso, serão dadas dicas do que deve ser feito em cada um dos arquivos e rotinas a serem modificados. 
+</P>
+
+<A NAME="toc3"></A>
+<H1>3. Modificações no Escalonador</H1>
+
+<P>
+Realize as modificações sugeridas nesta seção. 
+</P>
+
+<A NAME="toc4"></A>
+<H2>3.1. Arquivo: include/uapi/linux/sched.h</H2>
+
+<P>
+A modificação neste arquivo é bastante pontual, apenas precisamos definir um novo número de identificação para a nossa nova política de escalonamento: SCHED_LOW_IDLE. Localize as políticas 
+de escalonamento, conforme abaixo, e defina a política SCHED_LOW_IDLE com valor 7.
+</P>
+
+<PRE>
+  /*
+   * Scheduling policies
+   */
+  #define SCHED_NORMAL	0
+  #define SCHED_FIFO		1
+  #define SCHED_RR		2
+  #define SCHED_BATCH		3
+  /* SCHED_ISO: reserved but not implemented yet */
+  #define SCHED_IDLE		5
+  #define SCHED_DEADLINE	6
+</PRE>
+
+<A NAME="toc5"></A>
+<H2>3.2. Arquivo: kernel/sched/sched.h</H2>
+
+<P>
+Neste arquivo iremos definir uma nova função <I>inline</I>, novos defines e modificar uma função pré-definida. Siga, cuidadosamente, os três passos a seguir:
+</P>
+
+<UL>
+<LI>Localize a rotina <I>idle_policy()</I> e cria uma rotina correlata para a nova política. A nova rotina deverá se chamar <I>idle_low_policy()</I>;
+<LI>Modifique a rotina <I>valid_policy()</I> para validar corretamente o seu novo escalonador;
+<LI>Localize os defines:
+<P></P>
+
+<PRE>
+   #define WEIGHT_IDLEPRIO                3
+   #define WMULT_IDLEPRIO         1431655765
+  
+</PRE>
+
+<P></P>
+Crie dois defines correspondentes, eles devem se chamar <I>WEIGHT_LOW_IDLEPRIO</I> e <I>WMULT_LOW_IDLEPRIO</I>. WEIGHT_LOW_IDLEPRIO deve ser definido para o valor 1, WMULT_LOW_IDLEPRIO terá o mesmo valor de WMULT_IDLEPRIO.
+</UL>
+
+<A NAME="toc6"></A>
+<H2>3.3. Arquivo: kernel/sched/core.c</H2>
+
+<P>
+Neste ponto, as modificações são mais profundas, mas não complexas. O arquivo core.c é o núcleo do escalonador, fornecendo uma API com chamadas que devem ser utilizadas pelas 
+classes de escalonamento como, por exemplo, fair.c que implementa a classe CFS. Vamos lá!
+</P>
+
+<A NAME="toc7"></A>
+<H3>3.3.1. set_load_weight()</H3>
+
+<P>
+Localize a rotina <I>set_load_weight()</I>. Esta rotina configura os pesos (prioridades) de escalonamento no momento de criação da <I>task</I>. Nesta rotina, observe o seguinte trecho de código:
+</P>
+
+<PRE>
+  /*
+   * SCHED_IDLE tasks get minimal weight:
+   */
+  if (idle_policy(p-&gt;policy)) {
+  	load-&gt;weight = scale_load(WEIGHT_IDLEPRIO);
+  	load-&gt;inv_weight = WMULT_IDLEPRIO;
+  	return;
+  }
+</PRE>
+
+<P>
+Você precisa criar um trecho de código semelhante a este, mas que reflita os valores definidos para a nova política de escalonamento.
+</P>
+
+<A NAME="toc8"></A>
+<H3>3.3.2. __sched_setscheduler()</H3>
+
+<P>
+Na rotina  <I>__sched_setscheduler()</I>  encontre o trecho de código:
+</P>
+
+<PRE>
+  /*
+   * Treat SCHED_IDLE as nice 20. Only allow a switch to
+   * SCHED_NORMAL if the RLIMIT_NICE would normally permit it.
+   */
+  if (idle_policy(p-&gt;policy) &amp;&amp; !idle_policy(policy)) {
+  	if (!can_nice(p, task_nice(p)))
+  		return -EPERM;
+  }
+</PRE>
+
+<P>
+Este trecho de código cuida para que um processo não assuma um valor de <I>nice</I> não permitido para o usuário em questão. Modifque o <I>if</I> acima para incluir a nova classe de 
+escalonamento no teste.  
+</P>
+
+<A NAME="toc9"></A>
+<H3>3.3.3. sched_get_priority_max() e sched_get_priority_min()</H3>
+
+<P>
+Localize a implementação das syscalls <I>sched_get_priority_max()</I> e <I>sched_get_priority_min()</I> e modifique-as para que a prioridade máxima, assim como, a prioridade mínima, seja 0. 
+A política SCHED_LOW_IDLE, da mesma forma que SCHED_IDLE, não implementa prioridades. 
+</P>
+
+<A NAME="toc10"></A>
+<H2>3.4. Arquivo:  kernel/sched/fair.c</H2>
+
+<P>
+Agora, precisamos modificar a classe de escalonamento CFS, implementada no arquivo fair.c, para refletir o comportamento desejado para a política SCHED_LOW_IDLE.
+</P>
+
+<A NAME="toc11"></A>
+<H3>3.4.1. set_last_buddy() e set_next_buddy()</H3>
+
+<P>
+Ambas as rotinas devem retornar imediatamente caso a <I>task</I> seja SCHED_IDLE ou SCHED_LOW_IDLE. Modifique-as para assumirem este comportamento. 
+</P>
+
+<A NAME="toc12"></A>
+<H3>3.4.2. task_hot()</H3>
+
+<P>
+Esta rotina deve retornar imediatamente caso a <I>task</I> seja SCHED_IDLE ou SCHED_LOW_IDLE. Modifique-a para assumir este comportamento. 
+</P>
+
+<A NAME="toc13"></A>
+<H3>3.4.3. check_preempt_wakeup()</H3>
+
+<P>
+A rotina <I>check_preempt_wakeup()</I> é chamada para preemptar a task em execução, caso necessário. Localize o seguinte trecho:
+</P>
+
+<PRE>
+  /* Idle tasks are by definition preempted by non-idle tasks. */
+  if (unlikely(curr-&gt;policy == SCHED_IDLE) &amp;&amp; 
+      likely(p-&gt;policy != SCHED_IDLE))
+  	goto preempt;
+</PRE>
+
+<P>
+O trecho acima, fará que uma task SCHED_IDLE sempre seja preemptada por qualquer <I>task</I> pertencente a outra política de escalonamento. Modifique o trecho para que 
+a política SCHED_LOW_IDLE não cause preempção das <I>tasks</I> SCHED_IDLE. Este é o trecho de código mais importante, pois, fará que a política SCHED_LOW_IDLE tenha
+prioridade menor que SCHED_IDLE, conforme desejado. 
+</P>
+<P>
+Adicionalmente, você precisa escrever um trecho de código semelhante ao acima garantindo que <I>tasks</I> SCHED_LOW_IDLE sejam preemptadas por qualquer outro tipo de <I>task</I>.
+</P>
+
+<A NAME="toc14"></A>
+<H1>4. Finalizando</H1>
+
+<P>
+Recompile o seu código e teste o kernel. Agora você precisará modificar a implementação de <I>thread_runner</I> para aceitar threads com políticas SCHED_IDLE e SCHED_LOW_IDLE. 
+</P>
+<P>
+Não se esqueça que, para recompilar as modificações em seu kernel, você precisa configurar corretamente o Buildroot, conforme visto no <I>Tutorial 2.1: Linux Kernel - Obtendo os fontes e compilando com ajuda do Buildroot</I>:
+</P>
+
+<UL>
+<LI>Indique a localização dos fontes do seu kernel.
+<P></P>
+
+<PRE>
+  $export LINUX_OVERRIDE_SRCDIR=/home/user/linux-kernel-4.12.4/
+</PRE>
+
+<P></P>
+<LI>Apague os arquivos abaixo para forçar a compilação dos fontes do kernel pelo Buildroot.
+<P></P>
+
+<PRE>
+  $ rm output/build/linux-custom/.stamp_built
+  $ rm output/build/linux-custom/.stamp_rsynced 
+</PRE>
+
+</UL>
+
+</BODY></HTML>
