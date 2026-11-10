@@ -1,0 +1,1 @@
+cmd_/workspaces/lab-sisop/buildroot/modules/xtea_driver/built-in.o :=  rm -f /workspaces/lab-sisop/buildroot/modules/xtea_driver/built-in.o; ar rcSTPD /workspaces/lab-sisop/buildroot/modules/xtea_driver/built-in.o

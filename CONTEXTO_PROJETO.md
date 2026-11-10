@@ -116,6 +116,20 @@ Este arquivo serve como contexto completo para assistentes de IA (e desenvolvedo
 - Seção 3.4: `kernel/sched/fair.c` atualizado em `set_last_buddy()`, `set_next_buddy()`, `task_hot()` e `check_preempt_wakeup()` (garantindo que `SCHED_LOW_IDLE` não preempte `SCHED_IDLE`, mas seja preemptado por todas as outras classes).
 - Seção 4: Implementação dos utilitários em `setpriority/` (`setpriority`, `deadline`, `thread_runner`), instalados automaticamente no rootfs em `/usr/bin/`.
 
+### ✅ Tutorial 3.2: Depurando com trace-cmd e KernelShark
+- **Pacote trace-cmd**: Habilitado no Buildroot via `BR2_PACKAGE_TRACE_CMD=y`.
+- **Atividade 1 (Syscalls)**: Rastreamento do comportamento de chamadas de sistema (`sys_listProcessInfo`, `sys_listSleepProcesses`, `sys_printMessage`) com `trace-cmd record -p function_graph` e geração de relatório com `trace-cmd report` / KernelShark.
+- **Atividade 2 (Threads / Sched Switch)**: Implementação da aplicação concorrente `threads_test.c` (5 threads imprimindo caracteres em loop infinito), instalada automaticamente em `/usr/bin/threads_test` e rastreada via `trace-cmd record -e sched_switch`.
+- **Extração do trace.dat via e2tools**: Script `copiar_trace.sh` utilizando `e2cp` para transferir `/root/trace.dat` diretamente da imagem `rootfs.ext2` para a máquina host sem necessidade de loop mount.
+- **Visualização com KernelShark no Codespace**: Suporte a execução web/novnc com o script start (`curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45eccb8fc0a/raw/ | bash -s -- start`).
+
+### ✅ Trabalho Avaliativo: sched_profiler
+- **Aplicação Multithread**: Implementada em [`sched_profiler/sched_profiler.c`](file:///workspaces/lab-sisop/sched_profiler/sched_profiler.c) com alocação dinâmica de buffer global, sincronização estrita de índice e escrita via semáforo binário (`sem_t`, `sem_wait`, `sem_post`), caracteres por thread ('A', 'B', 'C', 'D'...) e suporte às políticas `SCHED_LOW_IDLE`, `SCHED_IDLE`, `SCHED_FIFO`, `SCHED_RR` e `SCHED_OTHER`.
+- **Pós-processamento e Métricas**: Exibição do buffer bruto, agregação de repetições consecutivas idênticas e contagem de vezes em que cada thread foi escalonada (bursts de CPU).
+- **Ambiente Mono-Core**: Execução no host via `taskset -c 0` e no QEMU via parâmetro `-smp cpus=1` configurado em [`run_qemu.sh`](file:///workspaces/lab-sisop/run_qemu.sh).
+- **Rastreamento e Análise**: Captura com `trace-cmd record -e sched:sched_switch` no QEMU, cópia com `copiar_trace.sh` e análise gráfica no KernelShark.
+- **Pacote de Entrega**: Gerador automatizado [`gerar_entrega.sh`](file:///workspaces/lab-sisop/gerar_entrega.sh) que compila e empacota [`sched_profiler.zip`](file:///workspaces/lab-sisop/sched_profiler.zip) contendo código fonte C, Makefile, `README.md` explicativo e diretório `imagens/`.
+
 ---
 
 ## 4. Instruções de Compilação e Execução no Host (WSL2 / Linux)

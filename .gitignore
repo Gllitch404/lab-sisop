@@ -28,3 +28,13 @@ setpriority/thread_runner
 buildroot/setpriority/setpriority
 buildroot/setpriority/deadline
 buildroot/setpriority/thread_runner
+threads_test/threads_test
+buildroot/threads_test/threads_test
+
+# Arquivos de trace Ftrace / trace-cmd
+*.dat
+trace.dat
+tracing/
+sched_profiler.zip
+sched_profiler/sched_profiler
+buildroot/sched_profiler/sched_profiler

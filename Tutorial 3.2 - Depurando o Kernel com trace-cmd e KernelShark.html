@@ -1,0 +1,204 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<link rel="stylesheet" type="text/css" href="tutorial.css">
+<title>Tutorial 3.2: Depurando o Kernel com trace-cmd e KernelShark</title>
+</head>
+<body bgcolor="white" text="black">
+<article>
+<header>
+<h1>Tutorial 3.2: Depurando o Kernel com trace-cmd e KernelShark</h1>
+</header>
+<nav>
+<div class="toc">
+  <ol>
+  <li><a href="#toc1">Objetivo</a></li>
+  <li><a href="#toc2">Instalando a ferramenta trace-cmd</a></li>
+  <li><a href="#toc3">Uso da ferramenta trace-cmd</a>
+    <ul>
+    <li><a href="#toc4">3.1. Filtrando apenas uma única função</a></li>
+    <li><a href="#toc5">3.2. Filtrando um único processo</a></li>
+    <li><a href="#toc6">3.3. Usando o modo function_graph</a></li>
+    <li><a href="#toc7">3.4. Monitorando eventos</a></li>
+    <li><a href="#toc8">3.5. Aplicando filtros</a></li>
+    </ul>
+  </li>
+  <li><a href="#toc9">Visualização de traces</a>
+    <ul>
+    <li><a href="#toc10">4.1. Exportando o trace para a máquina host</a></li>
+    <li><a href="#toc11">4.2. Realizando o tracing pela rede</a></li>
+    <li><a href="#toc12">4.3. Exportando direto no Codespace via e2tools (Powered by Bernardo)</a></li>
+    </ul>
+  </li>
+  <li><a href="#toc13">KernelShark</a></li>
+  <li><a href="#toc14">Atividade 1</a></li>
+  <li><a href="#toc15">Atividade 2</a></li>
+  </ol>
+</div>
+</nav>
+
+<div class="body" id="body">
+<section id="toc1">
+<h1>1. Objetivo</h1>
+<p>
+Nos últimos tutoriais foram apresentadas as formas básicas de uso da ferramenta Ftrace, sendo essa acessada diretamente pelo sistema de arquivos <em>debugfs/tracefs</em>. Apesar da interface provida pelo <em>debugfs</em> ser simples, em alguns casos essa pode ser inconveniente. <em>trace-cmd</em> é uma ferramenta de linha de comando em espaço de usuário que serve como interface de alto nível para o Ftrace. Nesse tutorial iremos instalar essa ferramenta e usá-la juntamente com a ferramenta gráfica <em>KernelShark</em> para realizar depuração visual do kernel.
+</p>
+</section>
+
+<section id="toc2">
+<h1>2. Instalando a ferramenta trace-cmd</h1>
+<p>No diretório do <em>buildroot</em>, execute <code>make menuconfig</code> e selecione o pacote <em>trace-cmd</em>:</p>
+<pre>
+Target packages  --->
+    Debugging, profiling and benchmark  --->
+         [*] trace-cmd
+</pre>
+</section>
+
+<section id="toc3">
+<h1>3. Uso da ferramenta trace-cmd</h1>
+<pre>
+$ trace-cmd record -e ext4 ls
+$ trace-cmd report
+</pre>
+
+<section id="toc4">
+<h2>3.1. Filtrando apenas uma única função</h2>
+<pre>
+$ trace-cmd record -p function -l __do_page_fault
+$ trace-cmd report
+</pre>
+</section>
+
+<section id="toc5">
+<h2>3.2. Filtrando um único processo</h2>
+<pre>
+$ trace-cmd record -p function -P &lt;PID&gt;
+$ trace-cmd report
+</pre>
+</section>
+
+<section id="toc6">
+<h2>3.3. Usando o modo function_graph</h2>
+<pre>
+$ trace-cmd record -p function_graph -P &lt;PID&gt;
+$ trace-cmd report | head -50
+</pre>
+</section>
+
+<section id="toc7">
+<h2>3.4. Monitorando eventos</h2>
+<pre>
+$ trace-cmd record -e sched:sched_switch
+$ trace-cmd report
+</pre>
+</section>
+
+<section id="toc8">
+<h2>3.5. Aplicando filtros</h2>
+<pre>
+$ trace-cmd record -p function_graph -l do_IRQ -e irq_handler_entry sleep 10
+$ trace-cmd report
+</pre>
+</section>
+</section>
+
+<section id="toc9">
+<h1>4. Visualização de traces</h1>
+
+<section id="toc10">
+<h2>4.1. Exportando o trace para a máquina host (via mount tradicional)</h2>
+<pre>
+$ sudo mount output/images/rootfs.ext2 /media/cdrom
+$ sudo cp /media/cdrom/root/trace.dat .
+$ sudo umount /media/cdrom
+</pre>
+</section>
+
+<section id="toc11">
+<h2>4.2. Realizando o tracing pela rede</h2>
+<pre>
+# No Host:
+$ trace-cmd listen -p 12345 -D -d ./tracing -l ./tracing/logfile
+
+# No Guest (QEMU):
+$ trace-cmd record -N 192.168.1.1:12345 -e sched_switch -e sched_wakeup -e irq ls
+</pre>
+</section>
+
+<section id="toc12">
+<h2>4.3. Exportando direto no Codespace via e2tools (Powered by Aluno Bernardo)</h2>
+<p>No Codespace, copie arquivos do filesystem ext2 sem privilégios de loop mount:</p>
+<pre>
+$ sudo apt-get update && sudo apt-get install e2tools -y
+$ e2cp output/images/rootfs.ext2:/root/trace.dat trace.dat
+</pre>
+</section>
+</section>
+
+<section id="toc13">
+<h1>5. KernelShark no Codespace</h1>
+<p>Instale o KernelShark no host e abra a interface gráfica:</p>
+<pre>
+$ sudo apt-get install -y kernelshark
+$ kernelshark trace.dat
+</pre>
+<p>Para abrir direto no navegador dentro do Codespace:</p>
+<pre>
+$ curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45eccb8fc0a/raw/ | bash -s -- start
+</pre>
+</section>
+
+<section id="toc14">
+<h1>6. Atividade 1</h1>
+<p>
+Visualizar o comportamento da chamada de sistema em uma aplicação exemplo (ex: <code>syscall_test</code>) utilizando <code>trace-cmd</code> e <code>KernelShark</code>:
+</p>
+<pre>
+# No Guest (QEMU):
+$ trace-cmd record -p function_graph -l sys_listProcessInfo -l sys_listSleepProcesses -l sys_printMessage syscall_test
+# ou gravar todos os eventos de chamadas de sistema:
+$ trace-cmd record -e raw_syscalls:sys_enter -e raw_syscalls:sys_exit syscall_test
+</pre>
+</section>
+
+<section id="toc15">
+<h1>7. Atividade 2</h1>
+<p>
+Aplicação multi-thread concorrente para análise de escalonamento via <code>trace-cmd record -e sched_switch</code> e KernelShark:
+</p>
+<pre>
+#include &lt;stdio.h&gt;
+#include &lt;pthread.h&gt;
+#include &lt;semaphore.h&gt;
+
+#define THREADS		5
+
+void *task(void *arg){
+	int tid;
+
+	tid = (int)(long int)arg;
+
+	while(1){
+		putchar('a' + tid);
+	}
+}
+
+int main(void){
+	long int i;
+	pthread_t threads[THREADS];
+
+	for(i = 0; i &lt; THREADS; i++)
+		pthread_create(&threads[i], NULL, task, (void *)i);
+
+	pthread_exit(NULL);
+
+	return 0;
+}
+</pre>
+</section>
+</div>
+</article>
+</body>
+</html>

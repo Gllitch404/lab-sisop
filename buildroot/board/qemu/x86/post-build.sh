@@ -49,11 +49,34 @@ if [ -n "$COMPILER" ] && [ -x "$COMPILER" ] && [ -d "$BUILDROOT_DIR/setpriority"
     ln -sf /usr/bin/thread_runner $BUILDROOT_DIR/output/target/bin/thread_runner 2>/dev/null || cp $BUILDROOT_DIR/output/target/usr/bin/thread_runner $BUILDROOT_DIR/output/target/bin/thread_runner 2>/dev/null || true
 fi
 
+# Tutorial 3.2 (trace-cmd & KernelShark): Compila a aplicacao de threads (Atividade 2)
+if [ -n "$COMPILER" ] && [ -x "$COMPILER" ] && [ -f "$BUILDROOT_DIR/custom-scripts/threads_test.c" ]; then
+    mkdir -p $BUILDROOT_DIR/output/target/usr/bin
+    mkdir -p $BUILDROOT_DIR/output/target/bin
+    $COMPILER -Wall -O2 -pthread -o $BUILDROOT_DIR/output/target/usr/bin/threads_test $BUILDROOT_DIR/custom-scripts/threads_test.c -lpthread || true
+    ln -sf /usr/bin/threads_test $BUILDROOT_DIR/output/target/bin/threads_test 2>/dev/null || cp $BUILDROOT_DIR/output/target/usr/bin/threads_test $BUILDROOT_DIR/output/target/bin/threads_test 2>/dev/null || true
+fi
+
+# Laboratório sched_profiler: Compila a aplicacao de analise de escalonamento
+if [ -n "$COMPILER" ] && [ -x "$COMPILER" ] && [ -f "$BUILDROOT_DIR/custom-scripts/sched_profiler.c" ]; then
+    mkdir -p $BUILDROOT_DIR/output/target/usr/bin
+    mkdir -p $BUILDROOT_DIR/output/target/bin
+    $COMPILER -Wall -O2 -pthread -o $BUILDROOT_DIR/output/target/usr/bin/sched_profiler $BUILDROOT_DIR/custom-scripts/sched_profiler.c -lpthread || true
+    ln -sf /usr/bin/sched_profiler $BUILDROOT_DIR/output/target/bin/sched_profiler 2>/dev/null || cp $BUILDROOT_DIR/output/target/usr/bin/sched_profiler $BUILDROOT_DIR/output/target/bin/sched_profiler 2>/dev/null || true
+fi
+
 # Tutorial 3.1 (Ftrace): Instala script de teste e garante montagem do tracefs em /etc/fstab
 if [ -f "$BUILDROOT_DIR/custom-scripts/ftrace_test.sh" ]; then
     mkdir -p $BUILDROOT_DIR/output/target/usr/bin
     cp $BUILDROOT_DIR/custom-scripts/ftrace_test.sh $BUILDROOT_DIR/output/target/usr/bin/ftrace_test
     chmod +x $BUILDROOT_DIR/output/target/usr/bin/ftrace_test
+fi
+
+# Tutorial 3.2 (trace-cmd): Instala script utilitário de teste
+if [ -f "$BUILDROOT_DIR/custom-scripts/run_trace_cmd_test.sh" ]; then
+    mkdir -p $BUILDROOT_DIR/output/target/usr/bin
+    cp $BUILDROOT_DIR/custom-scripts/run_trace_cmd_test.sh $BUILDROOT_DIR/output/target/usr/bin/run_trace_cmd_test
+    chmod +x $BUILDROOT_DIR/output/target/usr/bin/run_trace_cmd_test
 fi
 
 mkdir -p "$BUILDROOT_DIR/output/target/sys/kernel/tracing" 2>/dev/null || true

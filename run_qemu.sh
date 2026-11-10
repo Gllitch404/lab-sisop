@@ -32,18 +32,43 @@ if [ ! -f "$DISK" ]; then
     fi
 fi
 
+SMP_CPUS=1
+NET_MODE=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --net|-n)
+            NET_MODE=1
+            shift
+            ;;
+        --smp)
+            SMP_CPUS="$2"
+            shift 2
+            ;;
+        --smp=*)
+            SMP_CPUS="${1#*=}"
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
 echo "Iniciando QEMU com:"
 echo "  Kernel: $KERNEL"
 echo "  HDA:    $ROOTFS"
 echo "  HDB:    $DISK"
+echo "  SMP:    cpus=$SMP_CPUS"
 echo "Para sair do QEMU: pressione Ctrl+A e depois X"
 
-if [ "$1" = "--net" ] || [ "$1" = "-n" ]; then
+if [ "$NET_MODE" -eq 1 ]; then
     echo "Modo de rede habilitado (TAP tap0)..."
     sudo qemu-system-i386 \
         --kernel "$KERNEL" \
         --hda "$ROOTFS" \
         --hdb "$DISK" \
+        -smp cpus="$SMP_CPUS" \
         -net nic,model=e1000 \
         -net tap,ifname=tap0,script="$BUILDROOT_DIR/custom-scripts/qemu-ifup",downscript=no \
         --nographic \
@@ -53,6 +78,7 @@ else
         --kernel "$KERNEL" \
         --hda "$ROOTFS" \
         --hdb "$DISK" \
+        -smp cpus="$SMP_CPUS" \
         --nographic \
         --append "console=ttyS0 root=/dev/sda"
 fi
