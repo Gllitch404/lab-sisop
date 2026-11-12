@@ -1,3 +1,15 @@
+/*
+ * ============================================================================
+ * PUCRS - Escola Politécnica - Ciência da Computação
+ * Disciplina: Laboratório de Sistemas Operacionais
+ * Trabalho Prático: sched_profiler
+ * 
+ * Autores:
+ *   - Diego Fraga de Mello
+ *   - Vitor Rafael Borges
+ * ============================================================================
+ */
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>

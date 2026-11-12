@@ -1,4 +1,6 @@
 # Laboratório de Sistemas Operacionais: sched_profiler
+**PUCRS - Escola Politécnica - Ciência da Computação**  
+**Autores:** Diego Fraga de Mello e Vitor Rafael Borges  
 
 ## 1. Descrição do Trabalho
 Este projeto implementa a aplicação multithread **`sched_profiler`**, desenvolvida para a disciplina de Laboratório de Sistemas Operacionais (Ciência da Computação - PUCRS).
