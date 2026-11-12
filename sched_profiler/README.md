@@ -26,7 +26,33 @@ O objetivo é avaliar empiricamente as características de escalonamento de proc
 
 ---
 
-## 3. Parâmetros de Entrada e Execução
+## 3. Decisões de Projeto, Desafios Encontrados e Evolução da Implementação
+
+Durante o desenvolvimento do `sched_profiler`, nos deparamos com desafios conceituais e comportamentais clássicos de sistemas operacionais. Abaixo detalhamos os problemas enfrentados, as hipóteses testadas e as decisões finais de engenharia:
+
+### 3.1. Desafio 1: O Monopólio da CPU por uma Única Thread (`D = 1`, `A = 0`, `B = 0`, `C = 0`)
+* **Problema Encontrado:** Na primeira versão, um loop simples com escrita no buffer de 10.000 caracteres era executado. Ao rodar em ambiente monoprocessado (`-smp cpus=1`), a Thread D (última criada) começava a executar e preenchia todos os 10.000 bytes sozinha em menos de 8 milissegundos.
+* **Causa Raiz:** O processador virtual do QEMU executa instruções em C tão rapidamente que 10.000 iterações terminavam antes mesmo do relógio do Linux disparar a primeira interrupção de *timer tick* (fatia de tempo de ~100ms do `SCHED_RR`). Assim, as threads A, B e C ficavam na fila de prontos e nunca chegavam a ser escalonadas.
+* **Tentativa com `sched_yield()`:** Cogitamos chamar `sched_yield()` a cada caractere escrito. Porém, isso forçava cada thread a entregar a CPU voluntariamente após gravar 1 único caractere, gerando 2.500 alternâncias exatas para cada uma. Descartamos essa abordagem porque ela mascarava a preempção real e não refletia o comportamento genuíno do escalonador do Linux.
+* **Solução Adotada:**
+  1. **Barreira de Início (`pthread_barrier_t`):** Sincroniza a largada das threads, garantindo que todas foram criadas e configuradas com sua política antes de qualquer uma disputar o semáforo.
+  2. **Carga de CPU com Loop de Queima (`volatile int k`):** Inserimos uma carga de processamento matemático fora da seção crítica após a escrita. Isso aumenta o tempo de CPU de cada thread para que ele exceda o quantum do escalonador, permitindo que a preempção ocorra de forma 100% natural pelo Kernel.
+
+### 3.2. Desafio 2: Poluição Visual e Sobrecarga de E/S no Terminal
+* **Problema Encontrado:** Imprimir o buffer bruto com 10.000 caracteres inundava o console serial do QEMU com chamadas de sistema `write()`, tornando a execução lenta e dificultando a leitura dos resultados.
+* **Solução Adotada:** Implementamos parâmetros booleanos de controle de exibição via CLI:
+  - `--showpos` (Padrão): Exibe diretamente o resumo condensado do pós-processamento, mantendo a saída limpa.
+  - `--showpre`: Exibe o buffer bruto apenas quando o usuário deseja auditar a sequência caractere por caractere (formatado com quebra a cada 60 colunas para não romper o layout do terminal).
+
+### 3.3. Desafio 3: Automação da Instrumentação sem Gerar Ruído no Gráfico (`--record`)
+* **Problema Encontrado:** O comando de captura do `trace-cmd` (`trace-cmd record -e sched:sched_switch -o ...`) é longo e suscetível a erros de digitação.
+* **Hipótese:** Disparar o ftrace diretamente de dentro das threads em C (via chamadas `system()` ou manipulando `/sys/kernel/debug/tracing`).
+* **Por que descartamos gravar dentro das threads:** Fazer chamadas de sistema do `trace-cmd` no meio do código criaria processos secundários do shell e geraria eventos espúrios no KernelShark, poluindo o gráfico com processos auxiliares em vez de isolar as threads do teste.
+* **Solução Adotada (Self-Wrapping):** Criamos a flag `--record`. Quando acionada no `main()`, a própria aplicação monta o comando do `trace-cmd` e se reexecuta sob monitoramento. O `trace-cmd` inicia a gravação no kernel, o processo filho executa as threads de forma pura e, ao terminar, a gravação é encerrada automaticamente sem ruídos adicionais.
+
+---
+
+## 4. Parâmetros de Entrada e Execução
 
 ### Sintaxe
 ```bash
@@ -58,7 +84,7 @@ taskset -c 0 ./sched_profiler 10000 4 SCHED_RR --showpre
 
 ---
 
-## 4. Exemplos Reais de Saída do Programa
+## 5. Exemplos Reais de Saída do Programa
 
 ### 4.1. Execução Padrão (Modo `--showpos`):
 ```bash
@@ -118,7 +144,7 @@ D = 1
 
 ---
 
-## 5. Captura com trace-cmd e Visualização no KernelShark
+## 6. Captura com trace-cmd e Visualização no KernelShark
 
 ### 5.1. Capturando eventos no Guest (QEMU)
 No QEMU (iniciado com `./run_qemu.sh` que já define `-smp cpus=1`):
@@ -156,7 +182,7 @@ curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45e
 
 ---
 
-## 6. Análise Comparativa das Políticas no KernelShark
+## 7. Análise Comparativa das Políticas no KernelShark
 
 | Política | Comportamento Observado | Característica no KernelShark |
 | :--- | :--- | :--- |
@@ -181,7 +207,7 @@ curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45e
 
 ---
 
-## 7. Estrutura do Pacote de Entrega (`sched_profiler.zip`)
+## 8. Estrutura do Pacote de Entrega (`sched_profiler.zip`)
 - `sched_profiler.c`: Código fonte C com implementação do semáforo binário e configuração de políticas.
 - `Makefile`: Script de compilação com suporte a flags `-Wall -O2 -pthread`.
 - `README.md`: Este relatório detalhado de instruções, parâmetros e saídas.
