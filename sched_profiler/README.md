@@ -30,38 +30,42 @@ O objetivo é avaliar empiricamente as características de escalonamento de proc
 
 ### Sintaxe
 ```bash
-./sched_profiler <buffer_size> <num_threads> <policy>
+./sched_profiler <buffer_size> <num_threads> <policy> [--showpos | --showpre] [--record]
 ```
 
 - `<buffer_size>`: Quantidade total de caracteres a serem escritos no buffer global (ex.: `10000`).
 - `<num_threads>`: Quantidade de threads simultâneas a serem criadas (ex.: `4`).
 - `<policy>`: Política de escalonamento a ser configurada nas threads (`SCHED_LOW_IDLE`, `SCHED_IDLE`, `SCHED_FIFO`, `SCHED_RR` ou `SCHED_OTHER`).
+- `--showpos` (Padrão): Exibe diretamente a saída pós-processada (ordem compactada de rajadas e resumo por thread).
+- `--showpre`: Exibe também o buffer bruto antes do pós-processamento (todas as letras geradas).
+- `--record`: Dispara automaticamente a gravação de trace do kernel com `trace-cmd record -e sched:sched_switch` e salva em `/root/trace_<politica>.dat`.
 
 ### Exemplos de Execução
 
-#### No Host (forçando um único núcleo via taskset):
+#### Modo Gravação Automática no QEMU (com `--record`):
 ```bash
-taskset -c 0 ./sched_profiler 10000 4 SCHED_RR
+sched_profiler 10000 4 SCHED_RR --record
+sched_profiler 10000 4 SCHED_FIFO --record
+sched_profiler 10000 4 SCHED_IDLE --record
+sched_profiler 10000 4 SCHED_LOW_IDLE --record
 ```
 
-#### No Guest (QEMU emulando monoprocessador `--smp cpus=1`):
+#### Modo Manual (ou no Host via taskset):
 ```bash
-./sched_profiler 10000 4 SCHED_FIFO
-./sched_profiler 10000 4 SCHED_RR
-./sched_profiler 10000 4 SCHED_IDLE
-./sched_profiler 10000 4 SCHED_LOW_IDLE
+taskset -c 0 ./sched_profiler 10000 4 SCHED_RR
+taskset -c 0 ./sched_profiler 10000 4 SCHED_RR --showpre
 ```
 
 ---
 
-## 4. Exemplo de Saída do Programa
+## 4. Exemplos Reais de Saída do Programa
 
-### Comando executado:
+### 4.1. Execução Padrão (Modo `--showpos`):
 ```bash
 ./sched_profiler 10000 4 SCHED_RR
 ```
 
-### Saída gerada:
+#### Saída real gerada no terminal:
 ```text
 ============================================================
    Laboratorio de Sistemas Operacionais - sched_profiler   
@@ -72,28 +76,45 @@ Configuracao:
   Politica Escolhida: SCHED_RR (2)
 ============================================================
 
+Saida apos pos-processamento:
+ABDCABDCADBCA
+A = 4
+B = 3
+C = 3
+D = 3
+```
+
+### 4.2. Execução com `--showpre` (Exibindo o Buffer Bruto):
+*(Exemplo com buffer de 100 bytes para visualização com quebra de 60 colunas)*
+```bash
+./sched_profiler 100 4 SCHED_OTHER --showpre
+```
+
+#### Saída real gerada no terminal:
+```text
+============================================================
+   Laboratorio de Sistemas Operacionais - sched_profiler   
+============================================================
+Configuracao:
+  Tamanho do Buffer:  100 bytes
+  Numero de Threads:  4
+  Politica Escolhida: SCHED_OTHER (0)
+============================================================
+
 Saida sem pos-processamento:
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDD
-DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-DDDDDDDDDDDDDDDDDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-...
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 
 Saida apos pos-processamento:
-ABCDABCDABCDABCD
-A = 4
-B = 4
-C = 4
-D = 4
+DCB
+A = 0
+B = 1
+C = 1
+D = 1
 ```
 
 > **Explicação do Pós-processamento:**
-> O pós-processador agrega caracteres consecutivos idênticos, evidenciando as fatias de tempo em que cada thread manteve o controle da CPU. O contador quantifica quantas vezes cada thread obteve o processador (número de vezes escalonada).
+> O pós-processador agrega caracteres consecutivos idênticos, evidenciando as fatias de tempo em que cada thread manteve o controle da CPU. O contador quantifica quantas vezes cada thread obteve o processador (número de rajadas/bursts de CPU em que foi escalonada).
 
 ---
 
@@ -144,10 +165,28 @@ curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45e
 | **SCHED_IDLE** | Tarefas operam sob o CFS mas com peso estático 3, sendo preemptadas por qualquer outra tarefa do sistema. | Trocas de contexto frequentes compartilhando o tempo de processamento ocioso. |
 | **SCHED_LOW_IDLE** | Política com peso 1 desenvolvida no kernel da disciplina, preemptada até mesmo por tarefas `SCHED_IDLE`. | Execução somente quando não houver qualquer outra demanda de processamento. |
 
+### Capturas no KernelShark
+
+#### 1. SCHED_RR (Round-Robin)
+![SCHED_RR](imagens/trace_rr.png)
+
+#### 2. SCHED_FIFO (First In, First Out)
+![SCHED_FIFO](imagens/trace_fifo.png)
+
+#### 3. SCHED_IDLE
+![SCHED_IDLE](imagens/trace_idle.png)
+
+#### 4. SCHED_LOW_IDLE
+![SCHED_LOW_IDLE](imagens/trace_low_idle.png)
+
 ---
 
 ## 7. Estrutura do Pacote de Entrega (`sched_profiler.zip`)
 - `sched_profiler.c`: Código fonte C com implementação do semáforo binário e configuração de políticas.
 - `Makefile`: Script de compilação com suporte a flags `-Wall -O2 -pthread`.
 - `README.md`: Este relatório detalhado de instruções, parâmetros e saídas.
-- `imagens/`: Capturas de tela dos traces gerados no KernelShark para cada política.
+- `imagens/`: Capturas de tela dos traces gerados no KernelShark para as 4 políticas:
+  - `trace_rr.png` (SCHED_RR)
+  - `trace_fifo.png` (SCHED_FIFO)
+  - `trace_idle.png` (SCHED_IDLE)
+  - `trace_low_idle.png` (SCHED_LOW_IDLE)
