@@ -216,3 +216,23 @@ curl -fsSL https://gist.githubusercontent.com/miguelxvr/3c123ef67611652af9d2e45e
   - `trace_fifo.png` (SCHED_FIFO)
   - `trace_idle.png` (SCHED_IDLE)
   - `trace_low_idle.png` (SCHED_LOW_IDLE)
+
+---
+
+## 9. Trabalhos Futuros e Melhorias (Roadmap Pós-Deadline)
+
+Em virtude do prazo de entrega do trabalho prático (*deadline*), priorizamos a estabilidade da sincronização via semáforo, a fidelidade de preempção do escalonador e a integração com o `trace-cmd`. Mapeamos, no entanto, extensões arquiteturais promissoras para versões futuras da ferramenta:
+
+1. **Customização de Parâmetros de Instrumentação via CLI (`--record-args`):**
+   - Permitir a passagem de argumentos adicionais para o `trace-cmd` diretamente pela linha de comando ou via variável de ambiente (ex.: `TRACE_ARGS="-e sched:sched_wakeup" ./sched_profiler ... --record`), possibilitando rastrear também a transição do estado dormindo para pronto.
+2. **Métricas Temporais Precisas por Thread (CPU Time vs. Wall Time):**
+   - Instrumentar as threads com `clock_gettime(CLOCK_THREAD_CPUTIME_ID)` para mensurar com precisão de nanossegundos:
+     - Tempo efetivo de CPU consumido por cada thread.
+     - Tempo gasto bloqueada no semáforo binário.
+     - Duração média de cada rajada (*burst*).
+3. **Exportação Estruturada de Métricas (JSON / CSV):**
+   - Implementar a flag `--json` ou `--csv` para exportar a sequência de fatias e contagens de forma estruturada, facilitando a geração de gráficos automatizados com Python (Matplotlib / Pandas) em pipelines de integração contínua.
+4. **Mix Heterogêneo de Políticas na Mesma Execução:**
+   - Expandir a interface de linha de comando para permitir atribuir políticas distintas a cada thread individualmente (por exemplo: Thread A em `SCHED_FIFO`, Thread B em `SCHED_RR`, Thread C em `SCHED_OTHER` e Thread D em `SCHED_LOW_IDLE`). Isso permitiria visualizar no KernelShark a hierarquia de preempção entre diferentes classes competindo simultaneamente pelo mesmo núcleo.
+5. **Configuração Interna de Afinidade de CPU (`sched_setaffinity`):**
+   - Embutir a amarração ao núcleo 0 diretamente na inicialização do processo via `sched_setaffinity()`, eliminando a necessidade de o usuário invocar o utilitário externo `taskset -c 0` no host.
